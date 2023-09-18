@@ -1,0 +1,37 @@
+FROM rocm/dev-ubuntu-22.04:5.4.2-complete
+
+ARG FACEFUSION_VERSION=1.1.0
+ARG ONNXRUNTIME_VERSION=1.15.0
+
+ENV GRADIO_SERVER_NAME=0.0.0.0
+WORKDIR /facefusion
+
+RUN apt-get update
+RUN apt-get install -y git
+RUN apt-get install -y ffmpeg
+RUN apt-get install -y python3-dev
+RUN apt-get install -y python3-flatbuffers
+
+RUN pip install numpy
+RUN pip install flake8
+RUN pip install packaging
+RUN pip install wheel
+RUN pip install flatbuffers
+
+RUN curl -LO https://github.com/Kitware/CMake/releases/download/v3.27.4/cmake-3.27.4-linux-x86_64.tar.gz
+RUN tar xvf cmake-3.27.4-linux-x86_64.tar.gz
+RUN sudo mv cmake-3.27.4-linux-x86_64 /opt
+RUN sudo ln -s /opt/cmake-3.27.4-linux-x86_64/bin/cmake /usr/bin/cmake
+RUN sudo ln -s /opt/cmake-3.27.4-linux-x86_64/bin/ctest /usr/bin/ctest
+
+ENV PATH=/usr/bin/cmake:$PATH
+ENV PATH=/usr/bin/ctest:$PATH
+
+RUN git clone --single-branch --branch v$ONNXRUNTIME_VERSION --recursive https://github.com/Microsoft/onnxruntime
+RUN chmod +x onnxruntime/tools/ci_build/build.py
+RUN onnxruntime/tools/ci_build/build.py --allow_running_as_root --build_dir=build/Linux --config Release --build_wheel --update --build --parallel --skip_tests --cmake_extra_defines CMAKE_INSTALL_PREFIX=/usr/local/bin/cmake ONNXRUNTIME_VERSION=$ONNXRUNTIME_VERSION --use_rocm --rocm_home=/opt/rocm
+
+RUN git clone https://github.com/facefusion/facefusion.git --branch $FACEFUSION_VERSION .
+RUN pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/rocm5.4.2
+RUN pip uninstall onnxruntime
+RUN pip install build/Linux/Release/dist/*.whl
